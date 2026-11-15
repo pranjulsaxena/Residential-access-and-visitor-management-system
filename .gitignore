@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+web/node_modules/
+venv/
+ai-service/venv/
+__pycache__/
+*/__pycache__/
+*.py[cod]
+
+# Next.js Build Output & Cache
+.next/
+web/.next/
+out/
+build/
+dist/
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+web/.env
+ai-service/.env
+
+# Uploads & Media (Runtime data)
+uploads/
+uploads/*
+!uploads/.gitkeep
+
+# ML Models (Large weights downloaded at runtime)
+models/
+ai-service/models/
+ai-service/models/*
+!ai-service/models/.gitkeep
+
+# Docker & Database Volumes
+pgdata/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp

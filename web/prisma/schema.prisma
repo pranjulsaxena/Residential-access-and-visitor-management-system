@@ -1,0 +1,315 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// SOCIETY STRUCTURE
+// ==========================================
+
+model Flat {
+  id         String   @id @default(uuid())
+  flatNumber String   @unique @map("flat_number")
+  building   String?
+  floor      Int?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  residents        Resident[]
+  staffAssignments StaffFlatAssignment[]
+  visits           Visit[]
+  guestPasses      GuestPass[]
+
+  @@map("flats")
+}
+
+model Resident {
+  id           String   @id @default(uuid())
+  flatId       String   @map("flat_id")
+  name         String
+  phone        String
+  email        String?
+  isPrimary    Boolean  @default(false) @map("is_primary")
+  status       String   @default("active")
+  username     String?  @unique
+  passwordHash String?  @map("password_hash")
+  role         String   @default("resident") // resident | secretary
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  flat            Flat             @relation(fields: [flatId], references: [id])
+  vehicles        Vehicle[]
+  approvals       Approval[]
+  registeredStaff Staff[]          @relation("RegisteredBy")
+  faceProfiles    FaceProfile[]    @relation("ResidentFace")
+
+  @@map("residents")
+}
+
+model Gate {
+  id        String   @id @default(uuid())
+  name      String
+  location  String?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  guards    Guard[]
+  visits    Visit[]
+  entryLogs EntryLog[]
+
+  @@map("gates")
+}
+
+model Guard {
+  id             String   @id @default(uuid())
+  name           String
+  phone          String?
+  username       String   @unique
+  passwordHash   String   @map("password_hash")
+  assignedGateId String?  @map("assigned_gate_id")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  assignedGate Gate?      @relation(fields: [assignedGateId], references: [id])
+  visits       Visit[]
+  entryLogs    EntryLog[]
+
+  @@map("guards")
+}
+
+// ==========================================
+// PEOPLE WHO VISIT
+// ==========================================
+
+model Staff {
+  id                String   @id @default(uuid())
+  name              String
+  phone             String?
+  role              String
+  idDocument        Json?    @map("id_document")
+  isActive          Boolean  @default(true) @map("is_active")
+  clearanceLevel    String   @default("flat") @map("clearance_level")
+  allowedTimeWindow Json?    @map("allowed_time_window")
+  registeredById    String?  @map("registered_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  registeredBy    Resident?             @relation("RegisteredBy", fields: [registeredById], references: [id])
+  flatAssignments StaffFlatAssignment[]
+  faceProfiles    FaceProfile[]         @relation("StaffFace")
+
+  @@map("staff")
+}
+
+model StaffFlatAssignment {
+  id         String   @id @default(uuid())
+  staffId    String   @map("staff_id")
+  flatId     String   @map("flat_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  staff Staff @relation(fields: [staffId], references: [id])
+  flat  Flat  @relation(fields: [flatId], references: [id])
+
+  @@unique([staffId, flatId])
+  @@map("staff_flat_assignments")
+}
+
+model Visitor {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?
+  photoUrl  String?  @map("photo_url")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  visits      Visit[]
+  idDocuments IdDocument[]
+
+  @@map("visitors")
+}
+
+// ==========================================
+// FACE RECOGNITION
+// ==========================================
+
+model FaceProfile {
+  id         String   @id @default(uuid())
+  personType String   @map("person_type")
+  personId   String   @map("person_id")
+  embedding  Json     // Store as JSON array of 512 floats
+  photoUrl   String   @map("photo_url")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  // Relations (only one is valid based on personType)
+  resident Resident? @relation("ResidentFace", fields: [personId], references: [id], map: "fp_resident_fk")
+  staff    Staff?    @relation("StaffFace", fields: [personId], references: [id], map: "fp_staff_fk")
+
+  @@map("face_profiles")
+}
+
+model Vehicle {
+  id            String   @id @default(uuid())
+  residentId    String   @map("resident_id")
+  vehicleNumber String   @map("vehicle_number")
+  vehicleType   String?  @map("vehicle_type")
+  make          String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  resident   Resident    @relation(fields: [residentId], references: [id])
+  plateScans PlateScan[]
+
+  @@map("vehicles")
+}
+
+// ==========================================
+// VISITS & APPROVALS
+// ==========================================
+
+model Visit {
+  id            String    @id @default(uuid())
+  visitorId     String?   @map("visitor_id")
+  flatId        String    @map("flat_id")
+  gateId        String    @map("gate_id")
+  guardId       String    @map("guard_id")
+  visitType     String    @map("visit_type")
+  purpose       String?
+  vehicleNumber String?   @map("vehicle_number")
+  status        String    @default("pending")
+  photoUrl      String?   @map("photo_url")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  enteredAt     DateTime? @map("entered_at")
+  exitedAt      DateTime? @map("exited_at")
+
+  visitor             Visitor?             @relation(fields: [visitorId], references: [id])
+  flat                Flat                 @relation(fields: [flatId], references: [id])
+  gate                Gate                 @relation(fields: [gateId], references: [id])
+  guard               Guard                @relation(fields: [guardId], references: [id])
+  approval            Approval?
+  idDocuments         IdDocument[]
+  impersonationChecks ImpersonationCheck[]
+
+  @@map("visits")
+}
+
+model Approval {
+  id          String    @id @default(uuid())
+  visitId     String    @unique @map("visit_id")
+  residentId  String    @map("resident_id")
+  status      String    @default("pending")
+  requestedAt DateTime  @default(now()) @map("requested_at")
+  respondedAt DateTime? @map("responded_at")
+  note        String?
+
+  visit    Visit    @relation(fields: [visitId], references: [id])
+  resident Resident @relation(fields: [residentId], references: [id])
+
+  @@map("approvals")
+}
+
+model GuestPass {
+  id         String    @id @default(uuid())
+  flatId     String    @map("flat_id")
+  createdBy  String    @map("created_by")
+  guestName  String    @map("guest_name")
+  guestPhone String?   @map("guest_phone")
+  expectedAt DateTime? @map("expected_at")
+  validUntil DateTime  @map("valid_until")
+  purpose    String?
+  status     String    @default("active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  flat Flat @relation(fields: [flatId], references: [id])
+
+  @@map("guest_passes")
+}
+
+// ==========================================
+// ENTRY/EXIT LOGS
+// ==========================================
+
+model EntryLog {
+  id            String    @id @default(uuid())
+  personType    String    @map("person_type")
+  personId      String    @map("person_id")
+  gateId        String    @map("gate_id")
+  guardId       String    @map("guard_id")
+  visitId       String?   @map("visit_id")
+  method        String
+  confidence    Float?
+  photoUrl      String?   @map("photo_url")
+  vehicleNumber String?   @map("vehicle_number")
+  entryTime     DateTime  @default(now()) @map("entry_time")
+  exitTime      DateTime? @map("exit_time")
+
+  gate      Gate       @relation(fields: [gateId], references: [id])
+  guard     Guard      @relation(fields: [guardId], references: [id])
+  plateScan PlateScan?
+
+  @@map("entry_logs")
+}
+
+// ==========================================
+// ID VERIFICATION & IMPERSONATION
+// ==========================================
+
+model IdDocument {
+  id                 String   @id @default(uuid())
+  visitorId          String   @map("visitor_id")
+  visitId            String?  @map("visit_id")
+  documentType       String   @map("document_type")
+  idCategory         String   @map("id_category")
+  extractedData      Json     @map("extracted_data")
+  idPhotoUrl         String?  @map("id_photo_url")
+  rawImageUrl        String   @map("raw_image_url")
+  idNumber           String?  @map("id_number")
+  formatValid        Boolean? @map("format_valid")
+  verificationStatus String   @default("unverified") @map("verification_status")
+  verificationData   Json?    @map("verification_data")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  visitor             Visitor              @relation(fields: [visitorId], references: [id])
+  visit               Visit?               @relation(fields: [visitId], references: [id])
+  impersonationChecks ImpersonationCheck[]
+
+  @@map("id_documents")
+}
+
+model ImpersonationCheck {
+  id              String   @id @default(uuid())
+  idDocumentId    String   @map("id_document_id")
+  visitId         String   @map("visit_id")
+  livePhotoUrl    String   @map("live_photo_url")
+  idPhotoUrl      String   @map("id_photo_url")
+  similarityScore Float    @map("similarity_score")
+  result          String
+  previousUsage   Json?    @map("previous_usage")
+  guardDecision   String?  @map("guard_decision")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  idDocument IdDocument @relation(fields: [idDocumentId], references: [id])
+  visit      Visit      @relation(fields: [visitId], references: [id])
+
+  @@map("impersonation_checks")
+}
+
+// ==========================================
+// VEHICLE PLATE SCANNING
+// ==========================================
+
+model PlateScan {
+  id                 String   @id @default(uuid())
+  entryLogId         String   @unique @map("entry_log_id")
+  plateImageUrl      String   @map("plate_image_url")
+  extractedNumber    String?  @map("extracted_number")
+  ocrConfidence      Float?   @map("ocr_confidence")
+  manualOverride     String?  @map("manual_override")
+  matchedVehicleId   String?  @map("matched_vehicle_id")
+  verificationStatus String   @default("unverified") @map("verification_status")
+  parivahanData      Json?    @map("parivahan_data")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  entryLog       EntryLog @relation(fields: [entryLogId], references: [id])
+  matchedVehicle Vehicle? @relation(fields: [matchedVehicleId], references: [id])
+
+  @@map("plate_scans")
+}
