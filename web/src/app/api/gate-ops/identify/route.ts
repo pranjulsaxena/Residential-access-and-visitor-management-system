@@ -38,9 +38,12 @@ export async function POST(req: NextRequest) {
   aiForm.append("file", new Blob([buffer], { type: file.type }), filename);
 
   let matchResult: {
-    matched: boolean;
+    match_found?: boolean;
+    matched?: boolean;
+    person_id?: string;
     resident_id?: string;
     face_profile_id?: string;
+    confidence?: number;
     similarity?: number;
     person_type?: string;
   };
@@ -54,10 +57,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const isMatched = Boolean(matchResult.match_found || matchResult.matched);
+  const matchedPersonId = matchResult.person_id || matchResult.resident_id;
+  const confidenceScore = matchResult.confidence ?? matchResult.similarity ?? 0.0;
+  const personType = matchResult.person_type;
+
   // --- RESIDENT MATCH → auto-entry ---
-  if (matchResult.matched && matchResult.person_type === "resident" && matchResult.resident_id) {
+  if (isMatched && personType === "resident" && matchedPersonId) {
     const resident = await db.resident.findUnique({
-      where: { id: matchResult.resident_id },
+      where: { id: matchedPersonId },
       include: { flat: true },
     });
     if (!resident) {
@@ -72,7 +80,7 @@ export async function POST(req: NextRequest) {
         personType: "resident",
         personId: resident.id,
         method: "face",
-        confidence: matchResult.similarity,
+        confidence: confidenceScore,
         photoUrl,
       },
     });
@@ -87,24 +95,18 @@ export async function POST(req: NextRequest) {
         flatNumber: resident.flat.flatNumber,
         building: resident.flat.building,
       },
-      similarity: matchResult.similarity,
+      similarity: confidenceScore,
       entry_log_id: entryLog.id,
       photo_url: photoUrl,
     });
   }
 
   // --- STAFF MATCH → check time window ---
-  if (matchResult.matched && matchResult.person_type === "staff" && matchResult.resident_id) {
-    // For staff, resident_id refers to their registeredById (the resident who registered them)
-    // We need to find the staff by face profile
-    const faceProfile = await db.faceProfile.findUnique({
-      where: { id: matchResult.face_profile_id },
+  if (isMatched && personType === "staff" && matchedPersonId) {
+    const staff = await db.staff.findUnique({
+      where: { id: matchedPersonId },
       include: {
-        staff: {
-          include: {
-            registeredBy: { select: { name: true, flat: { select: { flatNumber: true } } } },
-          },
-        },
+        registeredBy: { select: { name: true, flat: { select: { flatNumber: true } } } },
       },
     });
 
@@ -118,9 +120,9 @@ export async function POST(req: NextRequest) {
           gateId,
           guardId: guardId!,
           personType: "staff",
-          personId: faceProfile?.personId ?? matchResult.resident_id,
+          personId: matchedPersonId,
           method: "face",
-          confidence: matchResult.similarity,
+          confidence: confidenceScore,
           photoUrl,
         },
       });
@@ -129,8 +131,9 @@ export async function POST(req: NextRequest) {
         action: "auto_entry",
         trust_level: 4,
         person_type: "staff",
-        staff_flat: faceProfile?.staff?.registeredBy?.flat?.flatNumber,
-        similarity: matchResult.similarity,
+        staff_name: staff?.name,
+        staff_flat: staff?.registeredBy?.flat?.flatNumber,
+        similarity: confidenceScore,
         entry_log_id: entryLog.id,
         photo_url: photoUrl,
       });
