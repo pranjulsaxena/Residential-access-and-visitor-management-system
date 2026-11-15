@@ -1,4 +1,3 @@
-import google.generativeai as genai
 import json
 import re
 from app.core.config import GEMINI_API_KEY
@@ -63,15 +62,23 @@ async def extract_id_data(image_bytes: bytes) -> dict:
         }
 
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        from google import genai
+        from google.genai import types
 
-        image_part = {
-            "mime_type": "image/jpeg",
-            "data": image_bytes,
-        }
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        config = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+            response_mime_type="application/json",
+        )
 
-        response = model.generate_content([EXTRACTION_PROMPT, image_part])
+        response = await client.aio.models.generate_content(
+            model="gemini-3.8-flash",
+            contents=[
+                EXTRACTION_PROMPT,
+                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+            ],
+            config=config,
+        )
         response_text = response.text.strip()
 
         # Clean markdown code blocks if returned
