@@ -13,7 +13,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Serve uploaded files
+# Serve uploaded files statically
 uploads_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads")
 if os.path.exists(uploads_dir):
     app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
@@ -22,8 +22,9 @@ if os.path.exists(uploads_dir):
 async def health():
     return {"status": "ok", "service": "RAVS AI Service"}
 
-# Routers will be added in Order 2 (AI Service)
-# from app.routers import face, id_verify, plate
-# app.include_router(face.router, prefix="/face", tags=["Face Recognition"])
-# app.include_router(id_verify.router, prefix="/id", tags=["ID Verification"])
-# app.include_router(plate.router, prefix="/plate", tags=["Plate OCR"])
+# Register all 3 AI Pipelines
+from app.routers import face, id_verify, plate
+
+app.include_router(face.router, prefix="/face", tags=["Face Recognition"])
+app.include_router(id_verify.router, prefix="/id", tags=["ID Verification"])
+app.include_router(plate.router, prefix="/plate", tags=["Plate OCR"])
