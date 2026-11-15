@@ -1,69 +1,82 @@
+import json
 import re
-import numpy as np
-from PIL import Image
-import io
-from paddleocr import PaddleOCR
-
-print("Loading PaddleOCR model...")
-ocr = PaddleOCR(use_angle_cls=True, lang="en")
-print("✅ PaddleOCR model ready")
+from app.core.config import GEMINI_API_KEY
 
 
 def clean_plate_number(raw_text: str) -> str:
     """Clean OCR output and normalize to standard Indian vehicle plate format"""
-    # Remove non-alphanumeric characters except spaces
+    if not raw_text:
+        return ""
     cleaned = re.sub(r"[^A-Z0-9 ]", "", raw_text.upper())
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
-
-    # Match Indian plate patterns: e.g. DL 8C AQ 1234, MH 12 AB 5678
-    patterns = [
-        r"[A-Z]{2}\s?\d{1,2}\s?[A-Z]{1,3}\s?\d{1,4}",
-        r"[A-Z]{2}\s?\d{1,2}\s?\d{1,4}",
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, cleaned)
-        if match:
-            return match.group(0).strip()
-
     return cleaned
 
 
-def read_plate(image_bytes: bytes) -> dict:
-    """Extract vehicle registration plate numbers from an image using PaddleOCR"""
+async def read_plate(image_bytes: bytes) -> dict:
+    """Extract vehicle registration plate numbers from an image using async Gemini Vision"""
+    if not GEMINI_API_KEY:
+        return {
+            "success": False,
+            "plate_number": None,
+            "raw_text": None,
+            "confidence": 0.0,
+            "message": "GEMINI_API_KEY is not configured in environment",
+        }
+
     try:
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        img_array = np.array(image)
+        from google import genai
+        from google.genai import types
 
-        result = ocr.ocr(img_array, cls=True)
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        config = types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+            response_mime_type="application/json",
+        )
 
-        if not result or not result[0]:
+        prompt = """Analyze this vehicle or license plate image.
+Extract the vehicle registration / license plate number (e.g. DL 01 AB 1234, MH 12 CD 5678, HR 26 etc.).
+
+Return ONLY a JSON object with this exact structure:
+{
+  "plate_number": "<clean plate number or null>",
+  "raw_text": "<text as it appears on the plate or null>",
+  "confidence": 0.95
+}"""
+
+        response = await client.aio.models.generate_content(
+            model="gemini-3.8-flash",
+            contents=[
+                prompt,
+                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+            ],
+            config=config,
+        )
+
+        response_text = response.text.strip()
+        if response_text.startswith("```"):
+            response_text = response_text.split("\n", 1)[1]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+
+        data = json.loads(response_text)
+        plate_num = clean_plate_number(data.get("plate_number") or "")
+
+        if not plate_num:
             return {
                 "success": False,
                 "plate_number": None,
-                "raw_text": None,
+                "raw_text": data.get("raw_text"),
                 "confidence": 0.0,
                 "message": "No vehicle registration plate text detected in image",
             }
 
-        texts = []
-        confidences = []
-        for line in result[0]:
-            text = line[1][0]
-            conf = line[1][1]
-            texts.append(text)
-            confidences.append(float(conf))
-
-        raw_text = " ".join(texts)
-        avg_confidence = float(sum(confidences) / len(confidences)) if confidences else 0.0
-        plate_number = clean_plate_number(raw_text)
-
         return {
             "success": True,
-            "plate_number": plate_number,
-            "raw_text": raw_text,
-            "confidence": avg_confidence,
-            "message": f"Plate detected: {plate_number}",
+            "plate_number": plate_num,
+            "raw_text": data.get("raw_text") or plate_num,
+            "confidence": float(data.get("confidence", 0.95)),
+            "message": f"Plate detected: {plate_num}",
         }
 
     except Exception as e:
@@ -72,5 +85,5 @@ def read_plate(image_bytes: bytes) -> dict:
             "plate_number": None,
             "raw_text": None,
             "confidence": 0.0,
-            "message": f"Plate OCR processing failed: {str(e)}",
+            "message": f"Plate recognition failed: {str(e)}",
         }

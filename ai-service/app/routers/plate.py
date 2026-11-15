@@ -11,5 +11,5 @@ async def read(file: UploadFile = File(..., description="Photograph of vehicle l
     Extract and parse vehicle registration numbers from license plate images using PaddleOCR.
     """
     image_bytes = await file.read()
-    result = read_plate(image_bytes)
+    result = await read_plate(image_bytes)
     return PlateReadResult(**result)
