@@ -17,10 +17,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     select: {
       id: true,
       status: true,
-      approvals: {
-        select: { status: true, notes: true, respondedAt: true },
-        orderBy: { respondedAt: "desc" },
-        take: 1,
+      approval: {
+        select: { status: true, note: true, respondedAt: true },
       },
     },
   });
@@ -30,6 +28,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   return NextResponse.json({
     visitId: visit.id,
     status: visit.status,
-    latestApproval: visit.approvals[0] || null,
+    latestApproval: visit.approval || null,
   });
 }
