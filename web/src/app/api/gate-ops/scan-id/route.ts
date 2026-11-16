@@ -34,7 +34,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await callAI("/id/extract", aiForm);
-    return NextResponse.json({ ...result, rawImageUrl });
+    return NextResponse.json({
+      ...result,
+      name: result.extracted_data?.name ?? null,
+      id_number: result.id_number ?? result.extracted_data?.id_number ?? null,
+      rawImageUrl,
+    });
   } catch (err) {
     return NextResponse.json(
       { error: `AI service error: ${(err as Error).message}`, rawImageUrl },

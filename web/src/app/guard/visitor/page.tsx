@@ -30,6 +30,13 @@ type IdResult = {
   id_number?: string;
   dob?: string;
   rawImageUrl?: string;
+  extracted_data?: {
+    name?: string;
+    phone?: string;
+    id_number?: string;
+    id_type?: string;
+    [key: string]: unknown;
+  };
 };
 
 export default function NewVisitorPage() {
@@ -80,13 +87,16 @@ export default function NewVisitorPage() {
       const res = await fetch("/api/gate-ops/scan-id", { method: "POST", body: form });
       const data = await res.json();
       setIdResult(data);
-      if (data.name && !visitorName) setVisitorName(data.name);
+      const extractedName = data.extracted_data?.name || data.name;
+      if (extractedName && !visitorName) setVisitorName(extractedName);
+      const extractedPhone = data.extracted_data?.phone || data.phone;
+      if (extractedPhone && !visitorPhone) setVisitorPhone(extractedPhone);
     } catch {
       /* silently fail – guard can fill manually */
     } finally {
       setScanLoading(false);
     }
-  }, [visitorName]);
+  }, [visitorName, visitorPhone]);
 
   async function createVisit(e: React.FormEvent) {
     e.preventDefault();
@@ -228,8 +238,8 @@ export default function NewVisitorPage() {
           {idResult && (
             <div className="text-xs bg-muted/50 rounded p-2 space-y-1">
               <p><span className="text-muted-foreground">Type:</span> {idResult.id_type ?? "—"}</p>
-              <p><span className="text-muted-foreground">Name:</span> {idResult.name ?? "—"}</p>
-              <p><span className="text-muted-foreground">Number:</span> {idResult.id_number ?? "—"}</p>
+              <p><span className="text-muted-foreground">Name:</span> {idResult.extracted_data?.name ?? idResult.name ?? "—"}</p>
+              <p><span className="text-muted-foreground">Number:</span> {idResult.id_number ?? idResult.extracted_data?.id_number ?? "—"}</p>
             </div>
           )}
         </CardContent>
