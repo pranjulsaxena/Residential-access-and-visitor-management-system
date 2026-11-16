@@ -44,7 +44,7 @@ Return ONLY a JSON object with this exact structure:
 }"""
 
         response = await client.aio.models.generate_content(
-            model="gemini-3.8-flash",
+            model="gemini-3.5-flash",
             contents=[
                 prompt,
                 types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),

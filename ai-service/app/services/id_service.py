@@ -72,7 +72,7 @@ async def extract_id_data(image_bytes: bytes) -> dict:
         )
 
         response = await client.aio.models.generate_content(
-            model="gemini-3.8-flash",
+            model="gemini-3.5-flash",
             contents=[
                 EXTRACTION_PROMPT,
                 types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
